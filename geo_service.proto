@@ -1,0 +1,25 @@
+// Указываем синтаксис proto3
+syntax = "proto3";
+
+// Определяем пакет для нашего сервиса
+package geoservice;
+
+// Сервис для отслеживания перемещения объекта в реальном времени
+service GeoService {
+  // Bidirectional streaming RPC: клиент отправляет поток координат,
+  // сервер отвечает потоком подтверждений или уведомлений
+  rpc TrackMovement(stream Coordinates) returns (stream MovementResponse);
+}
+
+// Сообщение с координатами объекта
+message Coordinates {
+  double latitude = 1;   // Широта (например, 55.7558)
+  double longitude = 2;  // Долгота (например, 37.6176)
+  int64 timestamp = 3;   // Время получения координат (Unix timestamp в миллисекундах)
+}
+
+// Сообщение-ответ от сервера на каждое обновление координат
+message MovementResponse {
+  string status = 1;    // Статус обработки: "received", "processed", "alert" и т.д.
+  string message = 2;   // Дополнительное пояснение
+}
