@@ -267,8 +267,7 @@ source venv/bin/activate
 python3 client.py
 ```
 Результат 
-
-<img width="553" height="349" alt="image" src="https://github.com/user-attachments/assets/928f6890-401d-479b-81ae-0af451078b44" />
+<img width="899" height="424" alt="image" src="https://github.com/user-attachments/assets/061c9966-9438-4580-b991-4f4286f3f0e6" />
 
 ## Выводы
 
