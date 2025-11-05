@@ -152,121 +152,89 @@ python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. geo_service.p
 # Шаг 4. Реализация сервера
 Создаем файлы server.py, client.py и пишем код сервера:
 ```
+# server.py
 import grpc
 from concurrent import futures
 import time
 import logging
 
-# Импортируем сгенерированные классы
 import geo_service_pb2
 import geo_service_pb2_grpc
 
 
-# Класс GeoServiceServicer реализует логику нашего сервиса
 class GeoServiceServicer(geo_service_pb2_grpc.GeoServiceServicer):
-
-    # Реализация Bidirectional Streaming RPC метода
     def TrackMovement(self, request_iterator, context):
-        """
-        Клиент отправляет поток координат (Coordinates),
-        сервер отвечает потоком подтверждений (MovementResponse).
-        """
-        print("Начато отслеживание перемещения объекта...")
+        print(" Сервер: начато отслеживание перемещения (ожидание координат от клиента)...")
         try:
-            # Перебираем все входящие сообщения от клиента
             for coord in request_iterator:
-                print(f"Получены координаты: широта={coord.latitude}, долгота={coord.longitude}, время={coord.timestamp}")
-
-                # Здесь можно добавить свою логику:
-                # - проверка на выход из зоны
-                # - сохранение в базу
-                # - детекция аномалий и т.д.
-
-                # Формируем ответное сообщение
+                print(f"Сервер получил: {coord.latitude:.4f}, {coord.longitude:.4f} @ {coord.timestamp}")
                 response = geo_service_pb2.MovementResponse(
                     status="processed",
-                    message=f"Координаты ({coord.latitude:.4f}, {coord.longitude:.4f}) успешно обработаны"
+                    message=f"[Сервер] Обработаны координаты: ({coord.latitude:.4f}, {coord.longitude:.4f})"
                 )
-
-                # Отправляем ответ клиенту
                 yield response
-
         except Exception as e:
-            print(f"Ошибка при обработке потока: {e}")
-            # Можно отправить финальный ответ об ошибке, если нужно
+            print(f" Сервер: ошибка при обработке потока: {e}")
             yield geo_service_pb2.MovementResponse(
                 status="error",
-                message="Произошла ошибка на сервере"
+                message="[Сервер] Внутренняя ошибка"
             )
 
 
 def serve():
-    # Создаём gRPC-сервер с пулом потоков
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    
-    # Регистрируем наш сервис на сервере
-    geo_service_pb2_grpc.add_GeoServiceServicer_to_server(
-        GeoServiceServicer(), server
-    )
-    
-    # Привязываем сервер к порту 50051
+    geo_service_pb2_grpc.add_GeoServiceServicer_to_server(GeoServiceServicer(), server)
     server.add_insecure_port('[::]:50051')
     server.start()
-    print("Сервер GeoService запущен на порту 50051...")
-    
-    # Ждём завершения работы (сервер работает бесконечно)
+    print(" Сервер GeoService запущен на порту 50051")
     server.wait_for_termination()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig()
     serve()
 ```
 ```
+# client.py
 import grpc
 import time
-import threading
-
-# Импортируем сгенерированные классы
 import geo_service_pb2
 import geo_service_pb2_grpc
 
 
+def coord_generator():
+    """Генератор координат — клиент ничего не обрабатывает, только отправляет."""
+    coords = [
+        (55.7558, 37.6176),
+        (55.7512, 37.6130),
+        (55.7489, 37.6190),
+        (55.7520, 37.6250),
+    ]
+    for i, (lat, lon) in enumerate(coords):
+        ts = int((time.time() + i) * 1000)
+        print(f"Клиент отправляет: {lat:.4f}, {lon:.4f}")
+        yield geo_service_pb2.Coordinates(latitude=lat, longitude=lon, timestamp=ts)
+        time.sleep(1)
+
+
 def run():
-    # Устанавливаем соединение с сервером
+    print("Подключение к серверу GeoService на localhost:50051...")
     with grpc.insecure_channel('localhost:50051') as channel:
-        # Создаём "заглушку" (stub) для вызова методов сервиса
         stub = geo_service_pb2_grpc.GeoServiceStub(channel)
 
-        print("Начинаем отправку координат объекта...")
-
-        # Генератор координат (имитация GPS-трека)
-        def coord_generator():
-            coordinates = [
-                (55.7558, 37.6176, int(time.time() * 1000)),   # Москва
-                (55.7512, 37.6130, int(time.time() * 1000)),   # немного сдвинулись
-                (55.7489, 37.6190, int(time.time() * 1000)),   # ещё сдвиг
-                (55.7520, 37.6250, int(time.time() * 1000)),   # и т.д.
-            ]
-            for lat, lon, ts in coordinates:
-                print(f" → Отправка координат: {lat}, {lon}")
-                yield geo_service_pb2.Coordinates(
-                    latitude=lat,
-                    longitude=lon,
-                    timestamp=ts
-                )
-                time.sleep(1)  # имитация реального времени между обновлениями
-
         try:
-            # Вызываем bidirectional streaming RPC
+            print("Начинаем отправку координат...")
             responses = stub.TrackMovement(coord_generator())
 
-            # Получаем и выводим ответы от сервера
+            print("Ожидание ответов от сервера...")
             for response in responses:
-                print(f" ← Ответ от сервера: [{response.status}] {response.message}")
+                print(f"Ответ от СЕРВЕРА: [{response.status}] {response.message}")
 
         except grpc.RpcError as e:
-            print(f"Ошибка RPC: {e.status()}: {e.details()}")
+            print(f"ОШИБКА: не удалось подключиться к серверу или вызвать метод")
+            print(f"   Код: {e.code()}, детали: {e.details()}")
+        except Exception as e:
+            print(f"Неожиданная ошибка: {e}")
 
 
 if __name__ == '__main__':
