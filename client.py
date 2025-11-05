@@ -1,5 +1,5 @@
 # client.py
-import grpc
+import grpс
 import time
 import geo_service_pb2
 import geo_service_pb2_grpc
@@ -42,3 +42,4 @@ def run():
 
 if __name__ == '__main__':
     run()
+
